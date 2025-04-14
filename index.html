@@ -3,82 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Smartphone Video Capture</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>Video Capture</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
-<body class="bg-gray-100 min-h-screen flex items-center justify-center">
-  <div class="text-center space-y-4">
-    <video id="preview" autoplay muted playsinline class="mx-auto rounded-lg shadow-lg w-full max-w-md"></video>
-    <button
-      onclick="startRecording()"
-      class="bg-blue-600 text-white px-6 py-2 rounded-full shadow hover:bg-blue-700 transition">
-      Start 15s Video Capture
+<body class="flex items-center justify-center h-screen bg-gray-900">
+  <div class="text-center">
+    <video id="preview" autoplay muted playsinline class="w-full max-w-md rounded shadow-lg"></video>
+    <button id="startBtn" class="mt-4 px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600">
+      Start Recording
     </button>
   </div>
-
-  <script>
-    let stream;
-    let mediaRecorder;
-    let recordedChunks = [];
-
-    async function startRecording() {
-      recordedChunks = [];
-
-      const constraints = {
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          frameRate: { ideal: 30 },
-          advanced: [{ torch: true }] // for flashlight
-        },
-        audio: false
-      };
-
-      try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-
-        // Try enabling flashlight
-        const videoTrack = stream.getVideoTracks()[0];
-        const capabilities = videoTrack.getCapabilities();
-        if (capabilities.torch) {
-          await videoTrack.applyConstraints({ advanced: [{ torch: true }] });
-        }
-
-        // Show preview
-        const videoElement = document.getElementById("preview");
-        videoElement.srcObject = stream;
-
-        // Start recording
-        mediaRecorder = new MediaRecorder(stream, { mimeType: "video/webm" });
-
-        mediaRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0) recordedChunks.push(e.data);
-        };
-
-        mediaRecorder.onstop = () => {
-          const blob = new Blob(recordedChunks, { type: "video/webm" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = "recorded-video.webm";
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          stream.getTracks().forEach((track) => track.stop());
-        };
-
-        mediaRecorder.start();
-
-        // Stop recording after 15 seconds
-        setTimeout(() => {
-          mediaRecorder.stop();
-        }, 15000);
-      } catch (err) {
-        alert("Error accessing camera or flashlight: " + err.message);
-        console.error(err);
-      }
-    }
-  </script>
+  <script src="index.js"></script>
 </body>
 </html>
