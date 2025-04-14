@@ -1,70 +1,80 @@
-const startBtn = document.getElementById('startBtn');
-const preview = document.getElementById('preview');
+const startBtn = document.getElementById("startBtn");
+const preview = document.getElementById("preview");
+const recordedVideo = document.getElementById("recordedVideo");
+const downloadLink = document.getElementById("downloadLink");
 
-let mediaStream;
 let mediaRecorder;
 let recordedChunks = [];
 
-async function startRecording() {
-  // Get the highest resolution possible
+async function startCamera() {
   const constraints = {
     video: {
-      facingMode: { ideal: 'environment' },
+      facingMode: { exact: "environment" },
       width: { ideal: 1920 },
       height: { ideal: 1080 }
     },
-    audio: false
+    audio: true
   };
 
   try {
-    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-    preview.srcObject = mediaStream;
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    preview.srcObject = stream;
 
-    // Turn on flashlight (if supported)
-    const track = mediaStream.getVideoTracks()[0];
-    const capabilities = track.getCapabilities();
+    const videoTrack = stream.getVideoTracks()[0];
+    const capabilities = videoTrack.getCapabilities();
     if (capabilities.torch) {
-      const imageCapture = new ImageCapture(track);
-      const photoSettings = { torch: true };
-      await track.applyConstraints({ advanced: [photoSettings] });
+      await videoTrack.applyConstraints({ advanced: [{ torch: true }] });
     }
 
-    // Start recording
-    recordedChunks = [];
-    mediaRecorder = new MediaRecorder(mediaStream, {
-      mimeType: 'video/webm;codecs=vp9'
-    });
-
-    mediaRecorder.ondataavailable = e => {
-      if (e.data.size > 0) recordedChunks.push(e.data);
-    };
-
-    mediaRecorder.onstop = () => {
-      const blob = new Blob(recordedChunks, { type: 'video/webm' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'recorded_video.webm';
-      a.click();
-      URL.revokeObjectURL(url);
-
-      // Stop all tracks
-      mediaStream.getTracks().forEach(track => track.stop());
-    };
-
-    mediaRecorder.start();
-    startBtn.disabled = true;
-    startBtn.innerText = 'Recording...';
-
-    // Stop after 15 seconds
-    setTimeout(() => {
-      mediaRecorder.stop();
-      startBtn.innerText = 'Recording Finished';
-    }, 15000);
+    return stream;
   } catch (err) {
-    console.error('Error:', err);
-    alert('Error accessing camera or flashlight.');
+    alert("Camera error: " + err.message);
   }
 }
 
-startBtn.addEventListener('click', startRecording);
+startBtn.addEventListener("click", async () => {
+  const stream = await startCamera();
+  if (!stream) return;
+
+  recordedChunks = [];
+  mediaRecorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+
+  mediaRecorder.ondataavailable = (e) => {
+    if (e.data.size > 0) recordedChunks.push(e.data);
+  };
+
+  mediaRecorder.onstop = async () => {
+    const webmBlob = new Blob(recordedChunks, { type: "video/webm" });
+    const { createFFmpeg, fetchFile } = FFmpeg;
+    const ffmpeg = createFFmpeg({ log: true });
+
+    startBtn.innerText = "Converting to MP4...";
+    startBtn.disabled = true;
+
+    await ffmpeg.load();
+    ffmpeg.FS('writeFile', 'input.webm', await fetchFile(webmBlob));
+    await ffmpeg.run('-i', 'input.webm', '-c:v', 'libx264', '-preset', 'fast', 'output.mp4');
+
+    const data = ffmpeg.FS('readFile', 'output.mp4');
+    const mp4Blob = new Blob([data.buffer], { type: 'video/mp4' });
+    const mp4URL = URL.createObjectURL(mp4Blob);
+
+    recordedVideo.src = mp4URL;
+    recordedVideo.classList.remove("hidden");
+
+    downloadLink.href = mp4URL;
+    downloadLink.classList.remove("hidden");
+
+    startBtn.innerText = "Start Recording (15s)";
+    startBtn.disabled = false;
+  };
+
+  mediaRecorder.start();
+  startBtn.disabled = true;
+  startBtn.innerText = "Recording...";
+
+  setTimeout(() => {
+    mediaRecorder.stop();
+    stream.getTracks().forEach(track => track.stop());
+  }, 15000);
+});

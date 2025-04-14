@@ -3,17 +3,32 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Video Capture</title>
+  <title>Smartphone Video Recorder</title>
 
+  <!-- Tailwind CSS -->
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  
+  <!-- FFmpeg wasm -->
+  <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.2/dist/ffmpeg.min.js"></script>
+  
+  <!-- App JS -->
+  <script defer src="index.js"></script>
 </head>
-<body class="flex items-center justify-center h-screen bg-gray-900">
-  <div class="text-center">
-    <video id="preview" autoplay muted playsinline class="w-full max-w-md rounded shadow-lg"></video>
-    <button id="startBtn" class="mt-4 px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600">
-      Start Recording
-    </button>
-  </div>
-  <script src="index.js"></script>
+<body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen p-6">
+
+  <h1 class="text-2xl font-bold mb-4 text-center">Smartphone Video Recorder (MP4 Output)</h1>
+
+  <video id="preview" autoplay playsinline muted class="rounded-xl border shadow-md w-full max-w-md"></video>
+
+  <button id="startBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 mt-4 rounded-xl">
+    Start Recording (15s)
+  </button>
+
+  <video id="recordedVideo" controls class="mt-6 w-full max-w-md hidden rounded-xl border shadow-md"></video>
+
+  <a id="downloadLink" class="mt-4 hidden bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-xl" download="video.mp4">
+    Download MP4 Video
+  </a>
+
 </body>
 </html>
