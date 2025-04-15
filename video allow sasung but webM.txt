@@ -2,33 +2,27 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>15s MP4 Video Recorder</title>
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
-  <style>
-    #status { font-size: 14px; }
-    #downloadLink { display: none; }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>15s Video Recorder</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
 <body class="bg-gray-900 text-white flex items-center justify-center min-h-screen">
-  <div class="text-center p-4">
+  <div class="text-center px-4">
     <video id="preview" autoplay playsinline muted class="w-full max-w-md mx-auto mb-4 rounded-lg border-2 border-gray-700"></video>
     <button id="startBtn" class="bg-blue-500 hover:bg-blue-600 px-6 py-2 rounded text-white font-bold mb-4">🎥 Start 15s Recording</button>
+    <a id="downloadLink" class="hidden mt-2 block text-green-400 underline font-semibold">⬇️ Download WebM Video</a>
     <p id="status" class="mt-2 text-sm text-gray-300 hidden">Recording...</p>
-    <a id="downloadLink" class="mt-2 block text-green-400 underline font-semibold">⬇️ Download MP4 Video</a>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>
   <script>
     const preview = document.getElementById('preview');
     const startBtn = document.getElementById('startBtn');
-    const status = document.getElementById('status');
     const downloadLink = document.getElementById('downloadLink');
+    const status = document.getElementById('status');
 
     let mediaStream;
     let recorder;
     let recordedChunks = [];
-    let ffmpeg;
 
     async function startCameraWithFlash() {
       try {
@@ -39,13 +33,14 @@
             height: { ideal: 1080 },
             advanced: [{ torch: true }]
           },
-          audio: false
+          audio: false // NO AUDIO
         });
 
-        const track = mediaStream.getVideoTracks()[0];
-        const capabilities = track.getCapabilities();
+        // Try to enable flashlight if supported
+        const videoTrack = mediaStream.getVideoTracks()[0];
+        const capabilities = videoTrack.getCapabilities();
         if (capabilities.torch) {
-          await track.applyConstraints({ advanced: [{ torch: true }] });
+          await videoTrack.applyConstraints({ advanced: [{ torch: true }] });
         }
 
         preview.srcObject = mediaStream;
@@ -61,13 +56,6 @@
       status.classList.remove('hidden');
       downloadLink.classList.add('hidden');
 
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      const videoTrack = mediaStream.getVideoTracks()[0];
-      const { width, height } = videoTrack.getSettings();
-      canvas.width = width;
-      canvas.height = height;
-
       recorder = new MediaRecorder(mediaStream, {
         mimeType: 'video/webm;codecs=vp9'
       });
@@ -76,35 +64,27 @@
         if (e.data.size > 0) recordedChunks.push(e.data);
       };
 
-      recorder.onstop = async () => {
+      recorder.onstop = () => {
         const blob = new Blob(recordedChunks, { type: 'video/webm' });
-        const arrayBuffer = await blob.arrayBuffer();
-        const uint8Array = new Uint8Array(arrayBuffer);
-
-        await ffmpeg.load();
-        ffmpeg.FS('writeFile', 'input.webm', uint8Array);
-        await ffmpeg.run('-i', 'input.webm', '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', 'output.mp4');
-
-        const data = ffmpeg.FS('readFile', 'output.mp4');
-        const videoBlob = new Blob([data.buffer], { type: 'video/mp4' });
-        const videoUrl = URL.createObjectURL(videoBlob);
-        downloadLink.href = videoUrl;
-        downloadLink.download = 'video.mp4';
+        const url = URL.createObjectURL(blob);
+        downloadLink.href = url;
+        downloadLink.download = 'video.webm';
         downloadLink.classList.remove('hidden');
         status.textContent = "✅ Done! Tap to download.";
       };
 
       recorder.start();
-      setTimeout(() => recorder.stop(), 15000);
+
+      setTimeout(() => {
+        recorder.stop();
+        mediaStream.getTracks().forEach(track => track.stop());
+      }, 15000); // 15 seconds
     }
 
     startBtn.addEventListener('click', async () => {
       await startCameraWithFlash();
       await startRecording();
     });
-
-    // Initialize ffmpeg.wasm
-    ffmpeg = createFFmpeg({ log: true });
   </script>
 </body>
 </html>
