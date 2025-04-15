@@ -3,21 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>15s Video Recorder</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.min.js"></script>
+  <title>15s Video Recorder with MP4</title>
+  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.min.js"></script>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
 <body class="bg-gray-900 text-white flex items-center justify-center min-h-screen">
-  <div class="text-center">
-    <video id="preview" autoplay playsinline class="w-full max-w-md mx-auto mb-4 rounded-lg border-2 border-gray-700"></video>
-    <button id="startBtn" class="bg-blue-500 hover:bg-blue-600 px-6 py-2 rounded text-white font-bold">Start 15s Recording</button>
-    <a id="downloadLink" class="hidden mt-4 block text-blue-400 underline">Download Video</a>
+  <div class="text-center px-4">
+    <video id="preview" autoplay playsinline muted class="w-full max-w-md mx-auto mb-4 rounded-lg border-2 border-gray-700"></video>
+    <button id="startBtn" class="bg-blue-500 hover:bg-blue-600 px-6 py-2 rounded text-white font-bold">🎥 Start 15s Recording</button>
+    <p id="status" class="mt-4 text-sm text-gray-300 hidden">⏳ Recording in progress...</p>
+    <a id="downloadLink" class="hidden mt-4 block text-green-400 underline font-semibold">⬇️ Download MP4 Video</a>
   </div>
 
   <script>
     const preview = document.getElementById('preview');
     const startBtn = document.getElementById('startBtn');
     const downloadLink = document.getElementById('downloadLink');
+    const status = document.getElementById('status');
+
     let mediaStream;
     let recorder;
     let recordedChunks = [];
@@ -34,59 +37,75 @@
           audio: true
         });
 
+        // Try to enable flashlight if supported
         const track = mediaStream.getVideoTracks()[0];
         const capabilities = track.getCapabilities();
         if (capabilities.torch) {
           await track.applyConstraints({ advanced: [{ torch: true }] });
-        } else {
-          alert("Flashlight not supported on this device/browser.");
         }
 
         preview.srcObject = mediaStream;
       } catch (err) {
-        console.error("Error accessing camera:", err);
-        alert("Camera access failed: " + err.message);
+        alert("Camera error: " + err.message);
+        console.error(err);
       }
     }
 
-    async function startRecording() {
-      recordedChunks = [];
+    async function convertToMP4(webmBlob) {
+      const { createFFmpeg, fetchFile } = FFmpeg;
+      const ffmpeg = createFFmpeg({ log: false });
+      await ffmpeg.load();
 
+      ffmpeg.FS('writeFile', 'input.webm', await fetchFile(webmBlob));
+      await ffmpeg.run('-i', 'input.webm', 'output.mp4');
+      const data = ffmpeg.FS('readFile', 'output.mp4');
+
+      return new Blob([data.buffer], { type: 'video/mp4' });
+    }
+
+    async function startRecording() {
+      downloadLink.classList.add('hidden');
+      status.classList.remove('hidden');
+      status.textContent = "⏳ Recording in progress...";
+
+      recordedChunks = [];
       recorder = new MediaRecorder(mediaStream, {
         mimeType: 'video/webm;codecs=vp9'
       });
 
-      recorder.ondataavailable = event => {
-        if (event.data.size > 0) {
-          recordedChunks.push(event.data);
-        }
+      recorder.ondataavailable = e => {
+        if (e.data.size > 0) recordedChunks.push(e.data);
       };
 
       recorder.onstop = async () => {
-        const blob = new Blob(recordedChunks, { type: 'video/webm' });
-        const arrayBuffer = await blob.arrayBuffer();
-        const ffmpeg = FFmpeg.createFFmpeg({ log: true });
-        await ffmpeg.load();
-        await ffmpeg.FS('writeFile', 'input.webm', new Uint8Array(arrayBuffer));
-        await ffmpeg.run('-i', 'input.webm', 'output.mp4');
-        const data = await ffmpeg.FS('readFile', 'output.mp4');
-        const videoBlob = new Blob([data.buffer], { type: 'video/mp4' });
-        const videoUrl = URL.createObjectURL(videoBlob);
-        downloadLink.href = videoUrl;
-        downloadLink.download = 'recorded-video.mp4';
-        downloadLink.classList.remove('hidden');
+        status.textContent = "⚙️ Converting to MP4...";
+        const webmBlob = new Blob(recordedChunks, { type: 'video/webm' });
+
+        try {
+          const mp4Blob = await convertToMP4(webmBlob);
+          const url = URL.createObjectURL(mp4Blob);
+
+          downloadLink.href = url;
+          downloadLink.download = 'recorded-video.mp4';
+          downloadLink.classList.remove('hidden');
+          status.textContent = "✅ Done! Download your video below.";
+        } catch (e) {
+          console.error("Conversion error:", e);
+          status.textContent = "❌ MP4 conversion failed.";
+        }
+
+        // Stop tracks to release the camera
+        mediaStream.getTracks().forEach(track => track.stop());
       };
 
       recorder.start();
 
       setTimeout(() => {
         recorder.stop();
-        mediaStream.getTracks().forEach(track => track.stop());
       }, 15000);
     }
 
     startBtn.addEventListener('click', async () => {
-      downloadLink.classList.add('hidden');
       await startCameraWithFlash();
       startRecording();
     });
