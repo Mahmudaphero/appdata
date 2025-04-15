@@ -1,23 +1,95 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>PPG Video Recorder</title>
-  <script defer src="script.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>15s Video Recorder</title>
+  <script defer src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.min.js"></script>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
-<body class="bg-gray-100 p-4">
-  <div class="max-w-md mx-auto">
-    <video id="video" autoplay class="w-full mb-4 rounded-lg shadow"></video>
-    <div class="flex justify-center space-x-4">
-      <button id="startBtn" class="bg-green-500 text-white px-4 py-2 rounded">Start</button>
-      <button id="stopBtn" class="bg-red-500 text-white px-4 py-2 rounded hidden">Stop</button>
-    </div>
-    <div id="plotContainer" class="mt-4 hidden">
-      <h2 class="text-xl font-bold text-center">Filtered Signal</h2>
-      <img id="filteredImage" src="" class="mt-2 w-full border rounded shadow" />
-    </div>
+<body class="bg-gray-900 text-white flex items-center justify-center min-h-screen">
+  <div class="text-center">
+    <video id="preview" autoplay playsinline class="w-full max-w-md mx-auto mb-4 rounded-lg border-2 border-gray-700"></video>
+    <button id="startBtn" class="bg-blue-500 hover:bg-blue-600 px-6 py-2 rounded text-white font-bold">Start 15s Recording</button>
+    <a id="downloadLink" class="hidden mt-4 block text-blue-400 underline">Download Video</a>
   </div>
-  <script src="script/script.js"></script>
+
+  <script>
+    const preview = document.getElementById('preview');
+    const startBtn = document.getElementById('startBtn');
+    const downloadLink = document.getElementById('downloadLink');
+    let mediaStream;
+    let recorder;
+    let recordedChunks = [];
+
+    async function startCameraWithFlash() {
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { exact: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            advanced: [{ torch: true }]
+          },
+          audio: true
+        });
+
+        const track = mediaStream.getVideoTracks()[0];
+        const capabilities = track.getCapabilities();
+        if (capabilities.torch) {
+          await track.applyConstraints({ advanced: [{ torch: true }] });
+        } else {
+          alert("Flashlight not supported on this device/browser.");
+        }
+
+        preview.srcObject = mediaStream;
+      } catch (err) {
+        console.error("Error accessing camera:", err);
+        alert("Camera access failed: " + err.message);
+      }
+    }
+
+    async function startRecording() {
+      recordedChunks = [];
+
+      recorder = new MediaRecorder(mediaStream, {
+        mimeType: 'video/webm;codecs=vp9'
+      });
+
+      recorder.ondataavailable = event => {
+        if (event.data.size > 0) {
+          recordedChunks.push(event.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+        const arrayBuffer = await blob.arrayBuffer();
+        const ffmpeg = FFmpeg.createFFmpeg({ log: true });
+        await ffmpeg.load();
+        await ffmpeg.FS('writeFile', 'input.webm', new Uint8Array(arrayBuffer));
+        await ffmpeg.run('-i', 'input.webm', 'output.mp4');
+        const data = await ffmpeg.FS('readFile', 'output.mp4');
+        const videoBlob = new Blob([data.buffer], { type: 'video/mp4' });
+        const videoUrl = URL.createObjectURL(videoBlob);
+        downloadLink.href = videoUrl;
+        downloadLink.download = 'recorded-video.mp4';
+        downloadLink.classList.remove('hidden');
+      };
+
+      recorder.start();
+
+      setTimeout(() => {
+        recorder.stop();
+        mediaStream.getTracks().forEach(track => track.stop());
+      }, 15000);
+    }
+
+    startBtn.addEventListener('click', async () => {
+      downloadLink.classList.add('hidden');
+      await startCameraWithFlash();
+      startRecording();
+    });
+  </script>
 </body>
 </html>
