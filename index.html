@@ -7,11 +7,14 @@
 </head>
 <body class="bg-gray-900 text-white flex flex-col items-center justify-center min-h-screen p-6">
   <h1 class="text-xl mb-4 font-bold">📹 Upload MP4 Video to Extract PPG</h1>
+  
   <form id="uploadForm" enctype="multipart/form-data" class="bg-gray-800 p-4 rounded shadow">
     <input type="file" name="video" accept="video/mp4" class="mb-4" required />
     <button type="submit" class="bg-green-500 px-4 py-2 rounded hover:bg-green-600">Upload</button>
   </form>
+  
   <img id="ppgPlot" src="" class="mt-6 border border-green-400 rounded hidden" alt="PPG Signal Plot" />
+
   <script>
     const form = document.getElementById("uploadForm");
     const plot = document.getElementById("ppgPlot");
@@ -19,13 +22,29 @@
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const formData = new FormData(form);
-      const res = await fetch("/upload", {
-        method: "POST",
-        body: formData
-      });
-      const blob = await res.blob();
-      plot.src = URL.createObjectURL(blob);
-      plot.classList.remove("hidden");
+
+      try {
+        const res = await fetch("https://aibrl.iub.edu.bd/video_folder", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!res.ok) {
+          throw new Error("Upload failed");
+        }
+
+        // If your API returns an image:
+        const blob = await res.blob();
+        plot.src = URL.createObjectURL(blob);
+        plot.classList.remove("hidden");
+
+        // If your API returns a JSON with image URL:
+        // const data = await res.json();
+        // plot.src = data.image_url;
+
+      } catch (err) {
+        console.error("Error:", err);
+      }
     });
   </script>
 </body>
